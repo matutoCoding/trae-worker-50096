@@ -26,7 +26,7 @@ import { renderWeavingCanvas } from '@/utils/weavingUtils';
 import { generateId } from '@/utils/colorUtils';
 import CraftOrder from '@/components/CraftOrder';
 import { CraftArchive } from '@/types';
-import { materialTypes } from '@/data/defaultData';
+import { materialTypes, defaultProcessSteps } from '@/data/defaultData';
 
 export default function WeavingPreview() {
   const navigate = useNavigate();
@@ -136,6 +136,8 @@ export default function WeavingPreview() {
       },
       notes: saveForm.notes,
       thumbnail: thumbCanvas.toDataURL('image/png'),
+      workOrderStatus: 'pending',
+      processSteps: defaultProcessSteps.map((s) => ({ ...s, id: generateId() })),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -619,7 +621,10 @@ export default function WeavingPreview() {
       )}
 
       {showCraftOrder && (
-        <CraftOrder onClose={() => setShowCraftOrder(false)} />
+        <CraftOrder
+          useCurrentScheme
+          onClose={() => setShowCraftOrder(false)}
+        />
       )}
     </div>
   );

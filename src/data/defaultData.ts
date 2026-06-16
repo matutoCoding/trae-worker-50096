@@ -1,4 +1,4 @@
-import { BambooColor } from '@/types';
+import { BambooColor, ProcessStep } from '@/types';
 import { generateId } from '@/utils/colorUtils';
 
 export const defaultMonochromeColors: BambooColor[] = [
@@ -69,4 +69,12 @@ export const templateCategories = [
   { id: 'calligraphy', name: '书法文字', icon: 'PenTool' },
   { id: 'pattern', name: '纹样图案', icon: 'Grid3x3' },
   { id: 'animal', name: '瑞兽吉祥', icon: 'Cat' },
+];
+
+export const defaultProcessSteps: ProcessStep[] = [
+  { id: 'prepare', name: '备篾', completed: false, note: '' },
+  { id: 'dye', name: '染色', completed: false, note: '' },
+  { id: 'layout', name: '排篾', completed: false, note: '' },
+  { id: 'weave', name: '挑压', completed: false, note: '' },
+  { id: 'finish', name: '收边', completed: false, note: '' },
 ];

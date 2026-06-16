@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { WeavingScheme, CraftArchive, Template, UIState, ViewMode } from '@/types';
+import { WeavingScheme, CraftArchive, Template, UIState, ViewMode, WorkOrderStatus } from '@/types';
 import { defaultMonochromeColors, defaultMulticolorPalette } from '@/data/defaultData';
 
 interface AppState {
@@ -13,6 +13,9 @@ interface AppState {
   addArchive: (archive: CraftArchive) => void;
   updateArchive: (id: string, updates: Partial<CraftArchive>) => void;
   deleteArchive: (id: string) => void;
+  setWorkOrderStatus: (id: string, status: WorkOrderStatus) => void;
+  toggleProcessStep: (archiveId: string, stepId: string) => void;
+  updateProcessStepNote: (archiveId: string, stepId: string, note: string) => void;
   addTemplate: (template: Template) => void;
   updateTemplate: (id: string, updates: Partial<Template>) => void;
   deleteTemplate: (id: string) => void;
@@ -56,6 +59,42 @@ export const useAppStore = create<AppState>()(
       deleteArchive: (id) =>
         set((state) => ({
           archives: state.archives.filter((a) => a.id !== id),
+        })),
+      setWorkOrderStatus: (id, status) =>
+        set((state) => ({
+          archives: state.archives.map((a) =>
+            a.id === id ? { ...a, workOrderStatus: status, updatedAt: new Date().toISOString() } : a
+          ),
+        })),
+      toggleProcessStep: (archiveId, stepId) =>
+        set((state) => ({
+          archives: state.archives.map((a) =>
+            a.id === archiveId
+              ? {
+                  ...a,
+                  processSteps: a.processSteps.map((s) =>
+                    s.id === stepId
+                      ? { ...s, completed: !s.completed, completedAt: !s.completed ? new Date().toISOString() : undefined }
+                      : s
+                  ),
+                  updatedAt: new Date().toISOString(),
+                }
+              : a
+          ),
+        })),
+      updateProcessStepNote: (archiveId, stepId, note) =>
+        set((state) => ({
+          archives: state.archives.map((a) =>
+            a.id === archiveId
+              ? {
+                  ...a,
+                  processSteps: a.processSteps.map((s) =>
+                    s.id === stepId ? { ...s, note } : s
+                  ),
+                  updatedAt: new Date().toISOString(),
+                }
+              : a
+          ),
         })),
       addTemplate: (template) =>
         set((state) => ({ templates: [template, ...state.templates] })),

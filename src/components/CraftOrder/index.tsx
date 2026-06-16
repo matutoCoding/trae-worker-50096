@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Printer,
   X,
@@ -9,26 +9,33 @@ import {
   Clock,
   FileText,
   Palette,
+  ClipboardList,
+  Save,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { CraftArchive, WeavingScheme } from '@/types';
 import { materialTypes } from '@/data/defaultData';
+import { defaultProcessSteps } from '@/data/defaultData';
 import {
   analyzeWarpSequences,
   analyzeWeftSequences,
   calculateColorSegmentSummary,
 } from '@/utils/sequenceUtils';
+import { generateId } from '@/utils/colorUtils';
+import { renderWeavingCanvas } from '@/utils/weavingUtils';
 
 interface CraftOrderProps {
   archive?: CraftArchive;
+  useCurrentScheme?: boolean;
   onClose: () => void;
 }
 
-export default function CraftOrder({ archive, onClose }: CraftOrderProps) {
-  const { currentScheme } = useAppStore();
+export default function CraftOrder({ archive, useCurrentScheme = false, onClose }: CraftOrderProps) {
+  const { currentScheme, addArchive } = useAppStore();
   const printRef = useRef<HTMLDivElement>(null);
+  const [saved, setSaved] = useState(false);
 
-  const scheme: WeavingScheme | null = archive?.scheme || currentScheme;
+  const scheme: WeavingScheme | null = useCurrentScheme ? currentScheme : (archive?.scheme || null);
 
   const warpSequences = useMemo(() => {
     if (!scheme) return [];
@@ -63,6 +70,40 @@ export default function CraftOrder({ archive, onClose }: CraftOrderProps) {
     return { mild, moderate, severe };
   }, [scheme]);
 
+  const handleSaveAsWorkOrder = () => {
+    if (!scheme || saved) return;
+
+    const thumbCanvas = renderWeavingCanvas(
+      scheme.pixels,
+      scheme.colors,
+      'far',
+      scheme.stripeWidth
+    );
+
+    const newArchive: CraftArchive = {
+      id: generateId(),
+      title: archive?.title || '新工单',
+      description: archive?.description || '',
+      tags: archive?.tags || [],
+      scheme,
+      craftParams: archive?.craftParams || {
+        material: 'phyllostachys-pubescens',
+        thickness: 0.8,
+        difficulty: 2,
+        estimatedHours: 40,
+      },
+      notes: archive?.notes || '',
+      thumbnail: thumbCanvas.toDataURL('image/png'),
+      workOrderStatus: 'pending',
+      processSteps: defaultProcessSteps.map((s) => ({ ...s, id: generateId() })),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    addArchive(newArchive);
+    setSaved(true);
+  };
+
   if (!scheme) {
     return (
       <div className="fixed inset-0 bg-ink-900/50 flex items-center justify-center z-50 p-4">
@@ -94,10 +135,7 @@ export default function CraftOrder({ archive, onClose }: CraftOrderProps) {
             .subtitle { text-align: center; color: #888; font-size: 12px; margin-bottom: 30px; }
             .section { margin-bottom: 24px; page-break-inside: avoid; }
             .section-title { font-size: 16px; font-weight: bold; color: #4A3728; border-left: 4px solid #6B8E23; padding-left: 10px; margin-bottom: 12px; }
-            .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
             .info-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed #e0e0e0; font-size: 14px; }
-            .info-label { color: #888; }
-            .info-value { font-weight: bold; }
             .color-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 13px; border-bottom: 1px solid #f0f0f0; }
             .color-swatch { width: 20px; height: 20px; border-radius: 4px; border: 1px solid #ccc; flex-shrink: 0; }
             .warning { background: #FFF5F5; border: 1px solid #FEB2B2; border-radius: 6px; padding: 12px; font-size: 13px; color: #9B2C2C; }
@@ -116,6 +154,7 @@ export default function CraftOrder({ archive, onClose }: CraftOrderProps) {
   };
 
   const title = archive?.title || '当前方案制作单';
+  const source = useCurrentScheme ? 'currentScheme' : 'archive';
 
   return (
     <div className="fixed inset-0 bg-ink-900/50 flex items-center justify-center z-50 p-4">
@@ -123,6 +162,31 @@ export default function CraftOrder({ archive, onClose }: CraftOrderProps) {
         <div className="card-header flex items-center justify-between">
           <h3 className="font-medium text-ink-800">工艺制作单</h3>
           <div className="flex items-center gap-2">
+            {!useCurrentScheme && archive && !saved && (
+              <button
+                onClick={handleSaveAsWorkOrder}
+                className="btn-secondary flex items-center gap-2 text-sm py-1.5 px-3"
+              >
+                <ClipboardList className="w-4 h-4" />
+                保存为工单
+              </button>
+            )}
+            {saved && (
+              <span className="text-sm text-bamboo-600 flex items-center gap-1">
+                <Save className="w-4 h-4" />
+                已保存为工单
+              </span>
+            )}
+            {useCurrentScheme && !archive && (
+              <button
+                onClick={handleSaveAsWorkOrder}
+                className={`flex items-center gap-2 text-sm py-1.5 px-3 ${saved ? 'text-bamboo-600' : 'btn-secondary'}`}
+                disabled={saved}
+              >
+                <ClipboardList className="w-4 h-4" />
+                {saved ? '已保存为工单' : '保存为工单'}
+              </button>
+            )}
             <button
               onClick={handlePrint}
               className="btn-primary flex items-center gap-2 text-sm py-1.5 px-3"
@@ -152,7 +216,7 @@ export default function CraftOrder({ archive, onClose }: CraftOrderProps) {
                 <FileText className="w-4 h-4 inline mr-1" />
                 基本信息
               </div>
-              {archive && (
+              {archive && source === 'archive' && (
                 <>
                   <div className="info-row flex justify-between py-1 border-b border-dashed border-parchment-300 text-sm">
                     <span className="text-ink-400">作品名称</span>
@@ -205,6 +269,12 @@ export default function CraftOrder({ archive, onClose }: CraftOrderProps) {
                   )}
                 </>
               )}
+              {useCurrentScheme && source === 'currentScheme' && (
+                <div className="info-row flex justify-between py-1 border-b border-dashed border-parchment-300 text-sm">
+                  <span className="text-ink-400">来源</span>
+                  <span className="font-medium text-ink-800">当前编辑方案</span>
+                </div>
+              )}
               <div className="info-row flex justify-between py-1 border-b border-dashed border-parchment-300 text-sm">
                 <span className="text-ink-400">出单日期</span>
                 <span className="font-medium text-ink-800">{new Date().toLocaleDateString('zh-CN')}</span>
@@ -218,7 +288,7 @@ export default function CraftOrder({ archive, onClose }: CraftOrderProps) {
               </div>
               <div className="thumbnail text-center mb-4">
                 <img
-                  src={archive?.thumbnail || scheme.imageData}
+                  src={(source === 'archive' && archive?.thumbnail) || scheme.imageData}
                   alt="缩略图"
                   className="max-w-[280px] mx-auto border border-parchment-300 rounded-lg"
                 />
@@ -322,7 +392,7 @@ export default function CraftOrder({ archive, onClose }: CraftOrderProps) {
             </div>
           )}
 
-          {archive?.notes && (
+          {archive?.notes && source === 'archive' && (
             <div className="section mb-6">
               <div className="section-title text-sm font-bold text-ink-700 border-l-4 border-bamboo-500 pl-2.5 mb-3">
                 <Clock className="w-4 h-4 inline mr-1" />

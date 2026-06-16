@@ -17,27 +17,46 @@ import {
   ExternalLink,
   Printer,
   Copy,
+  CheckSquare,
+  Square,
+  ClipboardList,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/common/PageHeader';
 import { useAppStore } from '@/store/useAppStore';
-import { CraftArchive, Template } from '@/types';
+import { CraftArchive, Template, WorkOrderStatus } from '@/types';
 import { generateId, formatDate } from '@/utils/colorUtils';
-import { materialTypes } from '@/data/defaultData';
-import { templateCategories } from '@/data/defaultData';
+import { materialTypes, defaultProcessSteps, templateCategories } from '@/data/defaultData';
 import { renderWeavingCanvas } from '@/utils/weavingUtils';
 import CraftOrder from '@/components/CraftOrder';
 
+const statusConfig: Record<WorkOrderStatus, { label: string; color: string; bg: string }> = {
+  pending: { label: '待开工', color: 'text-yellow-700', bg: 'bg-yellow-50 border-yellow-200' },
+  in_progress: { label: '制作中', color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200' },
+  completed: { label: '已完成', color: 'text-green-700', bg: 'bg-green-50 border-green-200' },
+};
+
 export default function Archives() {
   const navigate = useNavigate();
-  const { archives, addArchive, updateArchive, deleteArchive, currentScheme, setCurrentScheme, addTemplate } = useAppStore();
+  const {
+    archives,
+    addArchive,
+    updateArchive,
+    deleteArchive,
+    currentScheme,
+    setCurrentScheme,
+    addTemplate,
+    setWorkOrderStatus,
+    toggleProcessStep,
+    updateProcessStepNote,
+  } = useAppStore();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedArchive, setSelectedArchive] = useState<CraftArchive | null>(null);
+  const [selectedArchiveId, setSelectedArchiveId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editForm, setEditForm] = useState<Partial<CraftArchive>>({});
-  const [showCraftOrder, setShowCraftOrder] = useState(false);
+  const [craftOrderMode, setCraftOrderMode] = useState<'archive' | 'current' | null>(null);
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [convertForm, setConvertForm] = useState({
     name: '',
@@ -46,12 +65,15 @@ export default function Archives() {
     difficulty: 2,
   });
 
+  const selectedArchive = selectedArchiveId
+    ? archives.find((a) => a.id === selectedArchiveId) ?? null
+    : null;
+
   useEffect(() => {
-    if (archives.length > 0 && !selectedArchive) {
-      setSelectedArchive(archives[0]);
+    if (archives.length > 0 && !selectedArchiveId) {
+      setSelectedArchiveId(archives[0].id);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [archives]);
+  }, [archives, selectedArchiveId]);
 
   const filteredArchives = archives.filter(
     (archive) =>
@@ -88,6 +110,8 @@ export default function Archives() {
       },
       notes: '',
       thumbnail: thumbCanvas.toDataURL('image/png'),
+      workOrderStatus: 'pending' as const,
+      processSteps: defaultProcessSteps.map((s) => ({ ...s, id: generateId() })),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -105,8 +129,7 @@ export default function Archives() {
 
     if (editForm.id && archives.some((a) => a.id === editForm.id)) {
       updateArchive(editForm.id, editForm);
-      const updated = { ...editForm, updatedAt: new Date().toISOString() } as CraftArchive;
-      setSelectedArchive(updated);
+      setSelectedArchiveId(editForm.id);
     } else {
       const newArchive = editForm as CraftArchive;
       if (!newArchive.id) {
@@ -114,8 +137,14 @@ export default function Archives() {
       }
       newArchive.createdAt = newArchive.createdAt || new Date().toISOString();
       newArchive.updatedAt = new Date().toISOString();
+      if (!newArchive.workOrderStatus) {
+        newArchive.workOrderStatus = 'pending';
+      }
+      if (!newArchive.processSteps || newArchive.processSteps.length === 0) {
+        newArchive.processSteps = defaultProcessSteps.map((s) => ({ ...s, id: generateId() }));
+      }
       addArchive(newArchive);
-      setSelectedArchive(newArchive);
+      setSelectedArchiveId(newArchive.id);
     }
 
     setShowCreateModal(false);
@@ -124,7 +153,7 @@ export default function Archives() {
   };
 
   const handleEdit = (archive: CraftArchive) => {
-    setSelectedArchive(archive);
+    setSelectedArchiveId(archive.id);
     setEditForm(archive);
     setIsEditing(true);
     setShowCreateModal(true);
@@ -133,14 +162,14 @@ export default function Archives() {
   const handleDelete = (id: string) => {
     if (confirm('确定要删除这个工艺档案吗？')) {
       deleteArchive(id);
-      if (selectedArchive?.id === id) {
-        setSelectedArchive(archives.length > 1 ? archives.find((a) => a.id !== id) || null : null);
+      if (selectedArchiveId === id) {
+        setSelectedArchiveId(archives.length > 1 ? archives.find((a) => a.id !== id)?.id ?? null : null);
       }
     }
   };
 
   const handleView = (archive: CraftArchive) => {
-    setSelectedArchive(archive);
+    setSelectedArchiveId(archive.id);
     setIsEditing(false);
   };
 
@@ -205,7 +234,7 @@ export default function Archives() {
           <div className="flex items-center gap-3">
             {currentScheme && (
               <button
-                onClick={() => setShowCraftOrder(true)}
+                onClick={() => setCraftOrderMode('current')}
                 className="btn-secondary flex items-center gap-2"
               >
                 <Printer className="w-4 h-4" />
@@ -247,46 +276,57 @@ export default function Archives() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {filteredArchives.map((archive) => (
-                    <div
-                      key={archive.id}
-                      onClick={() => handleView(archive)}
-                      className={`p-3 rounded-lg cursor-pointer transition-all border ${
-                        selectedArchive?.id === archive.id
-                          ? 'border-bamboo-400 bg-bamboo-50'
-                          : 'border-transparent hover:bg-parchment-100'
-                      }`}
-                    >
-                      <div className="flex gap-3">
-                        <div className="w-14 h-14 rounded-lg bg-parchment-200 overflow-hidden flex-shrink-0">
-                          <img
-                            src={archive.thumbnail}
-                            alt={archive.title}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-medium text-ink-800 text-sm truncate">
-                            {archive.title}
-                          </h4>
-                          <div className="flex items-center gap-1 text-xs text-ink-400 mt-1">
-                            <Calendar className="w-3 h-3" />
-                            {formatDate(archive.createdAt).split(' ')[0]}
+                  {filteredArchives.map((archive) => {
+                    const status = archive.workOrderStatus || 'pending';
+                    const cfg = statusConfig[status];
+                    return (
+                      <div
+                        key={archive.id}
+                        onClick={() => handleView(archive)}
+                        className={`p-3 rounded-lg cursor-pointer transition-all border ${
+                          selectedArchiveId === archive.id
+                            ? 'border-bamboo-400 bg-bamboo-50'
+                            : 'border-transparent hover:bg-parchment-100'
+                        }`}
+                      >
+                        <div className="flex gap-3">
+                          <div className="w-14 h-14 rounded-lg bg-parchment-200 overflow-hidden flex-shrink-0">
+                            <img
+                              src={archive.thumbnail}
+                              alt={archive.title}
+                              className="w-full h-full object-cover"
+                            />
                           </div>
-                          <div className="flex gap-1 mt-1 flex-wrap">
-                            {archive.tags.slice(0, 2).map((tag, i) => (
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-medium text-ink-800 text-sm truncate">
+                                {archive.title}
+                              </h4>
                               <span
-                                key={i}
-                                className="px-2 py-0.5 bg-parchment-100 text-ink-500 text-xs rounded"
+                                className={`inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded border ${cfg.bg} ${cfg.color} flex-shrink-0`}
                               >
-                                {tag}
+                                {cfg.label}
                               </span>
-                            ))}
+                            </div>
+                            <div className="flex items-center gap-1 text-xs text-ink-400 mt-1">
+                              <Calendar className="w-3 h-3" />
+                              {formatDate(archive.createdAt).split(' ')[0]}
+                            </div>
+                            <div className="flex gap-1 mt-1 flex-wrap">
+                              {archive.tags.slice(0, 2).map((tag, i) => (
+                                <span
+                                  key={i}
+                                  className="px-2 py-0.5 bg-parchment-100 text-ink-500 text-xs rounded"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -300,7 +340,7 @@ export default function Archives() {
                 <h3 className="font-medium text-ink-800">{selectedArchive.title}</h3>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setShowCraftOrder(true)}
+                    onClick={() => setCraftOrderMode('archive')}
                     className="btn-secondary flex items-center gap-1.5 text-sm py-1.5 px-3"
                   >
                     <Printer className="w-3.5 h-3.5" />
@@ -464,6 +504,76 @@ export default function Archives() {
 
                     <div>
                       <h4 className="font-medium text-ink-800 mb-3 flex items-center gap-2">
+                        <ClipboardList className="w-4 h-4 text-bamboo-600" />
+                        工单状态
+                      </h4>
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          {(['pending', 'in_progress', 'completed'] as WorkOrderStatus[]).map(
+                            (s) => {
+                              const cfg = statusConfig[s];
+                              const isActive = (selectedArchive.workOrderStatus || 'pending') === s;
+                              return (
+                                <button
+                                  key={s}
+                                  onClick={() => setWorkOrderStatus(selectedArchive.id, s)}
+                                  className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${
+                                    isActive
+                                      ? `${cfg.bg} ${cfg.color} ring-1 ring-current`
+                                      : 'border-parchment-200 text-ink-400 hover:bg-parchment-50'
+                                  }`}
+                                >
+                                  {cfg.label}
+                                </button>
+                              );
+                            }
+                          )}
+                        </div>
+                        <div>
+                          <div className="flex justify-between text-xs text-ink-500 mb-1">
+                            <span>工序进度</span>
+                            <span>
+                              {selectedArchive.processSteps?.filter((s) => s.completed).length ?? 0} /{' '}
+                              {selectedArchive.processSteps?.length ?? 0}
+                            </span>
+                          </div>
+                          <div className="h-2 bg-parchment-200 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-bamboo-500 rounded-full transition-all duration-300"
+                              style={{
+                                width: `${
+                                  selectedArchive.processSteps?.length
+                                    ? (selectedArchive.processSteps.filter((s) => s.completed).length /
+                                        selectedArchive.processSteps.length) *
+                                      100
+                                    : 0
+                                }%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                        {(() => {
+                          const steps = selectedArchive.processSteps ?? [];
+                          const lastNote = [...steps].reverse().find((s) => s.note);
+                          const lastDone = [...steps].reverse().find((s) => s.completed);
+                          const activity = lastNote || lastDone;
+                          if (!activity) return null;
+                          return (
+                            <div className="text-xs text-ink-400">
+                              <span className="text-ink-500">最近动态：</span>
+                              {activity.name}
+                              {activity.completedAt && ` · ${formatDate(activity.completedAt)}`}
+                              {activity.note && ` — ${activity.note}`}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+
+                    <div className="decoration-line" />
+
+                    <div>
+                      <h4 className="font-medium text-ink-800 mb-3 flex items-center gap-2">
                         <Clock className="w-4 h-4 text-bamboo-600" />
                         创建时间
                       </h4>
@@ -482,6 +592,61 @@ export default function Archives() {
                     </p>
                   </div>
                 )}
+
+                <div className="mt-6 pt-6 border-t border-parchment-200">
+                  <h4 className="font-medium text-ink-800 mb-4 flex items-center gap-2">
+                    <ClipboardList className="w-4 h-4 text-bamboo-600" />
+                    工序记录
+                  </h4>
+                  <div className="space-y-3">
+                    {(selectedArchive.processSteps ?? []).map((step) => (
+                      <div
+                        key={step.id}
+                        className={`flex items-start gap-3 p-3 rounded-lg border transition-all ${
+                          step.completed
+                            ? 'bg-bamboo-50/50 border-bamboo-200'
+                            : 'bg-white border-parchment-200'
+                        }`}
+                      >
+                        <button
+                          onClick={() => toggleProcessStep(selectedArchive.id, step.id)}
+                          className="mt-0.5 text-bamboo-600 hover:text-bamboo-700 flex-shrink-0"
+                        >
+                          {step.completed ? (
+                            <CheckSquare className="w-5 h-5" />
+                          ) : (
+                            <Square className="w-5 h-5" />
+                          )}
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <span
+                              className={`text-sm font-medium ${
+                                step.completed ? 'text-bamboo-700 line-through' : 'text-ink-800'
+                              }`}
+                            >
+                              {step.name}
+                            </span>
+                            {step.completedAt && (
+                              <span className="text-xs text-ink-400">
+                                {formatDate(step.completedAt)}
+                              </span>
+                            )}
+                          </div>
+                          <input
+                            type="text"
+                            value={step.note}
+                            onChange={(e) =>
+                              updateProcessStepNote(selectedArchive.id, step.id, e.target.value)
+                            }
+                            placeholder="添加备注..."
+                            className="mt-1 w-full text-xs text-ink-600 bg-transparent border-none outline-none placeholder:text-ink-300 focus:ring-0 p-0"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           ) : (
@@ -840,10 +1005,16 @@ export default function Archives() {
         </div>
       )}
 
-      {showCraftOrder && (
+      {craftOrderMode === 'archive' && selectedArchive && (
         <CraftOrder
-          archive={selectedArchive || undefined}
-          onClose={() => setShowCraftOrder(false)}
+          archive={selectedArchive}
+          onClose={() => setCraftOrderMode(null)}
+        />
+      )}
+      {craftOrderMode === 'current' && (
+        <CraftOrder
+          useCurrentScheme
+          onClose={() => setCraftOrderMode(null)}
         />
       )}
     </div>

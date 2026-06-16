@@ -56,6 +56,16 @@ export interface WeavingScheme {
   };
 }
 
+export type WorkOrderStatus = 'pending' | 'in_progress' | 'completed';
+
+export interface ProcessStep {
+  id: string;
+  name: string;
+  completed: boolean;
+  note: string;
+  completedAt?: string;
+}
+
 export interface CraftArchive {
   id: string;
   title: string;
@@ -70,6 +80,8 @@ export interface CraftArchive {
   };
   notes: string;
   thumbnail: string;
+  workOrderStatus: WorkOrderStatus;
+  processSteps: ProcessStep[];
   createdAt: string;
   updatedAt: string;
 }
