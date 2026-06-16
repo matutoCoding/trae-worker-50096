@@ -17,12 +17,14 @@ import {
   Tag,
   Calendar,
   Star,
+  Printer,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/common/PageHeader';
 import { useAppStore } from '@/store/useAppStore';
 import { renderWeavingCanvas } from '@/utils/weavingUtils';
 import { generateId } from '@/utils/colorUtils';
+import CraftOrder from '@/components/CraftOrder';
 import { CraftArchive } from '@/types';
 import { materialTypes } from '@/data/defaultData';
 
@@ -43,6 +45,7 @@ export default function WeavingPreview() {
   const dragStart = useRef({ x: 0, y: 0 });
 
   const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showCraftOrder, setShowCraftOrder] = useState(false);
   const [saveForm, setSaveForm] = useState({
     title: '',
     description: '',
@@ -219,6 +222,13 @@ export default function WeavingPreview() {
             <button className="btn-secondary flex items-center gap-2">
               <Download className="w-4 h-4" />
               导出方案
+            </button>
+            <button
+              onClick={() => setShowCraftOrder(true)}
+              className="btn-secondary flex items-center gap-2"
+            >
+              <Printer className="w-4 h-4" />
+              制作单
             </button>
             <button
               onClick={() => setShowSaveModal(true)}
@@ -606,6 +616,10 @@ export default function WeavingPreview() {
             </div>
           </div>
         </div>
+      )}
+
+      {showCraftOrder && (
+        <CraftOrder onClose={() => setShowCraftOrder(false)} />
       )}
     </div>
   );

@@ -15,23 +15,36 @@ import {
   Star,
   Play,
   ExternalLink,
+  Printer,
+  Copy,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/common/PageHeader';
 import { useAppStore } from '@/store/useAppStore';
-import { CraftArchive } from '@/types';
+import { CraftArchive, Template } from '@/types';
 import { generateId, formatDate } from '@/utils/colorUtils';
 import { materialTypes } from '@/data/defaultData';
+import { templateCategories } from '@/data/defaultData';
+import { renderWeavingCanvas } from '@/utils/weavingUtils';
+import CraftOrder from '@/components/CraftOrder';
 
 export default function Archives() {
   const navigate = useNavigate();
-  const { archives, addArchive, updateArchive, deleteArchive, currentScheme, setCurrentScheme } = useAppStore();
+  const { archives, addArchive, updateArchive, deleteArchive, currentScheme, setCurrentScheme, addTemplate } = useAppStore();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedArchive, setSelectedArchive] = useState<CraftArchive | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editForm, setEditForm] = useState<Partial<CraftArchive>>({});
+  const [showCraftOrder, setShowCraftOrder] = useState(false);
+  const [showConvertModal, setShowConvertModal] = useState(false);
+  const [convertForm, setConvertForm] = useState({
+    name: '',
+    category: 'pattern',
+    description: '',
+    difficulty: 2,
+  });
 
   useEffect(() => {
     if (archives.length > 0 && !selectedArchive) {
@@ -54,9 +67,16 @@ export default function Archives() {
       return;
     }
 
+    const thumbCanvas = renderWeavingCanvas(
+      currentScheme.pixels,
+      currentScheme.colors,
+      'far',
+      currentScheme.stripeWidth
+    );
+
     const newArchive: CraftArchive = {
       id: generateId(),
-      title: '新作品档案',
+      title: '',
       description: '',
       tags: [],
       scheme: currentScheme,
@@ -67,7 +87,7 @@ export default function Archives() {
         estimatedHours: 40,
       },
       notes: '',
-      thumbnail: currentScheme.imageData,
+      thumbnail: thumbCanvas.toDataURL('image/png'),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -83,14 +103,19 @@ export default function Archives() {
       return;
     }
 
-    if (editForm.id) {
+    if (editForm.id && archives.some((a) => a.id === editForm.id)) {
       updateArchive(editForm.id, editForm);
+      const updated = { ...editForm, updatedAt: new Date().toISOString() } as CraftArchive;
+      setSelectedArchive(updated);
     } else {
       const newArchive = editForm as CraftArchive;
-      newArchive.id = generateId();
-      newArchive.createdAt = new Date().toISOString();
+      if (!newArchive.id) {
+        newArchive.id = generateId();
+      }
+      newArchive.createdAt = newArchive.createdAt || new Date().toISOString();
       newArchive.updatedAt = new Date().toISOString();
       addArchive(newArchive);
+      setSelectedArchive(newArchive);
     }
 
     setShowCreateModal(false);
@@ -109,7 +134,7 @@ export default function Archives() {
     if (confirm('确定要删除这个工艺档案吗？')) {
       deleteArchive(id);
       if (selectedArchive?.id === id) {
-        setSelectedArchive(null);
+        setSelectedArchive(archives.length > 1 ? archives.find((a) => a.id !== id) || null : null);
       }
     }
   };
@@ -117,8 +142,42 @@ export default function Archives() {
   const handleView = (archive: CraftArchive) => {
     setSelectedArchive(archive);
     setIsEditing(false);
-    setShowCreateModal(true);
-    setEditForm(archive);
+  };
+
+  const handleConvertToTemplate = () => {
+    if (!selectedArchive) return;
+    setConvertForm({
+      name: selectedArchive.title,
+      category: 'pattern',
+      description: selectedArchive.description,
+      difficulty: selectedArchive.craftParams.difficulty,
+    });
+    setShowConvertModal(true);
+  };
+
+  const handleSaveTemplate = () => {
+    if (!selectedArchive) return;
+    if (!convertForm.name.trim()) {
+      alert('请输入模板名称');
+      return;
+    }
+
+    const newTemplate: Template = {
+      id: generateId(),
+      name: convertForm.name,
+      category: convertForm.category,
+      description: convertForm.description,
+      thumbnail: selectedArchive.thumbnail,
+      scheme: selectedArchive.scheme,
+      isFavorite: false,
+      usageCount: 0,
+      difficulty: convertForm.difficulty,
+      createdAt: new Date().toISOString(),
+    };
+
+    addTemplate(newTemplate);
+    setShowConvertModal(false);
+    alert('模板已保存到「' + templateCategories.find((c) => c.id === convertForm.category)?.name + '」分类');
   };
 
   const getMaterialName = (id: string) => {
@@ -143,13 +202,24 @@ export default function Archives() {
         subtitle="记录和管理每一幅竹编作品的工艺档案"
         icon={<FileText className="w-7 h-7" />}
         actions={
-          <button
-            onClick={handleCreateFromCurrent}
-            className="btn-primary flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            新建档案
-          </button>
+          <div className="flex items-center gap-3">
+            {currentScheme && (
+              <button
+                onClick={() => setShowCraftOrder(true)}
+                className="btn-secondary flex items-center gap-2"
+              >
+                <Printer className="w-4 h-4" />
+                当前方案出单
+              </button>
+            )}
+            <button
+              onClick={handleCreateFromCurrent}
+              className="btn-primary flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              新建档案
+            </button>
+          </div>
         }
       />
 
@@ -229,6 +299,20 @@ export default function Archives() {
               <div className="card-header flex items-center justify-between">
                 <h3 className="font-medium text-ink-800">{selectedArchive.title}</h3>
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowCraftOrder(true)}
+                    className="btn-secondary flex items-center gap-1.5 text-sm py-1.5 px-3"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    制作单
+                  </button>
+                  <button
+                    onClick={handleConvertToTemplate}
+                    className="btn-secondary flex items-center gap-1.5 text-sm py-1.5 px-3"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    转为模板
+                  </button>
                   <button
                     onClick={() => {
                       setCurrentScheme(selectedArchive.scheme);
@@ -632,6 +716,135 @@ export default function Archives() {
             </div>
           </div>
         </div>
+      )}
+
+      {showConvertModal && (
+        <div className="fixed inset-0 bg-ink-900/50 flex items-center justify-center z-50 p-4">
+          <div className="card w-full max-w-xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="card-header flex items-center justify-between">
+              <h3 className="font-medium text-ink-800">转为模板</h3>
+              <button
+                onClick={() => setShowConvertModal(false)}
+                className="p-1 text-ink-400 hover:text-ink-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto flex-1 space-y-4">
+              <div>
+                <label className="text-sm font-medium text-ink-700 block mb-1.5">
+                  模板名称 *
+                </label>
+                <input
+                  type="text"
+                  value={convertForm.name}
+                  onChange={(e) => setConvertForm({ ...convertForm, name: e.target.value })}
+                  className="input-field"
+                  placeholder="如：梅兰竹菊纹样"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-ink-700 block mb-1.5">
+                  模板分类
+                </label>
+                <select
+                  value={convertForm.category}
+                  onChange={(e) => setConvertForm({ ...convertForm, category: e.target.value })}
+                  className="input-field"
+                >
+                  {templateCategories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-ink-700 block mb-1.5">
+                  模板描述
+                </label>
+                <textarea
+                  value={convertForm.description}
+                  onChange={(e) => setConvertForm({ ...convertForm, description: e.target.value })}
+                  className="input-field min-h-[80px] resize-none"
+                  placeholder="描述模板的特点、适用场景等"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-ink-700 block mb-1.5">
+                  难度等级
+                </label>
+                <div className="flex items-center gap-2 pt-2">
+                  {[1, 2, 3, 4, 5].map((level) => (
+                    <button
+                      key={level}
+                      type="button"
+                      onClick={() => setConvertForm({ ...convertForm, difficulty: level })}
+                      className="p-1"
+                    >
+                      <Star
+                        className={`w-7 h-7 ${
+                          level <= convertForm.difficulty
+                            ? 'text-parchment-500 fill-parchment-500'
+                            : 'text-parchment-200'
+                        }`}
+                      />
+                    </button>
+                  ))}
+                  <span className="ml-3 text-sm text-ink-500">
+                    {['', '入门', '简单', '中等', '复杂', '精品'][convertForm.difficulty]}
+                  </span>
+                </div>
+              </div>
+
+              {selectedArchive && (
+                <div className="p-4 bg-parchment-50 rounded-lg border border-parchment-200">
+                  <div className="text-xs text-ink-500 mb-2">档案信息</div>
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={selectedArchive.thumbnail}
+                      alt=""
+                      className="w-16 h-12 rounded border border-parchment-300 object-cover"
+                    />
+                    <div className="text-sm">
+                      <div className="font-medium text-ink-700">{selectedArchive.title}</div>
+                      <div className="text-ink-400 text-xs">
+                        {selectedArchive.scheme.pixelWidth}×{selectedArchive.scheme.pixelHeight} ·
+                        篾宽 {selectedArchive.scheme.stripeWidth}mm ·
+                        {selectedArchive.scheme.colors.length}色
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="card-header flex justify-end gap-3 flex-shrink-0">
+              <button
+                onClick={() => setShowConvertModal(false)}
+                className="btn-secondary"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSaveTemplate}
+                className="btn-primary flex items-center gap-2"
+              >
+                <Copy className="w-4 h-4" />
+                保存为模板
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCraftOrder && (
+        <CraftOrder
+          archive={selectedArchive || undefined}
+          onClose={() => setShowCraftOrder(false)}
+        />
       )}
     </div>
   );

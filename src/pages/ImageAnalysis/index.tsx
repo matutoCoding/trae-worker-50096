@@ -27,7 +27,7 @@ import { useNavigate } from 'react-router-dom';
 
 export default function ImageAnalysis() {
   const navigate = useNavigate();
-  const { setCurrentScheme } = useAppStore();
+  const { currentScheme, setCurrentScheme } = useAppStore();
 
   const [isDragging, setIsDragging] = useState(false);
   const [sourceImage, setSourceImage] = useState<HTMLImageElement | null>(null);
@@ -48,7 +48,25 @@ export default function ImageAnalysis() {
     canvasHeight: 0,
   });
 
+  const [restoredFromScheme, setRestoredFromScheme] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (currentScheme && !restoredFromScheme) {
+      setStripeWidth(currentScheme.stripeWidth);
+      setColorMode(currentScheme.colorMode);
+      setBrightnessThreshold(currentScheme.brightnessThreshold);
+      setContrast(currentScheme.contrast);
+      setBrightness(currentScheme.brightness);
+      setRestoredFromScheme(true);
+
+      if (currentScheme.imageData) {
+        loadImage(currentScheme.imageData).then((img) => {
+          setSourceImage(img);
+        }).catch(() => {});
+      }
+    }
+  }, [currentScheme, restoredFromScheme]);
 
   const processImage = useCallback(async (img: HTMLImageElement) => {
     setIsProcessing(true);
@@ -113,6 +131,7 @@ export default function ImageAnalysis() {
       try {
         const img = await loadImage(dataUrl);
         setSourceImage(img);
+        setRestoredFromScheme(true);
         processImage(img);
       } catch (error) {
         console.error('图片加载失败:', error);
@@ -178,6 +197,7 @@ export default function ImageAnalysis() {
     const dataUrl = canvas.toDataURL('image/png');
     const img = await loadImage(dataUrl);
     setSourceImage(img);
+    setRestoredFromScheme(true);
     processImage(img);
   }, [processImage]);
 
