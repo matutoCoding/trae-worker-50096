@@ -49,7 +49,6 @@ export default function ImageAnalysis() {
   });
 
   const [restoredFromScheme, setRestoredFromScheme] = useState(false);
-  const [restoreImage, setRestoreImage] = useState<HTMLImageElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -63,7 +62,7 @@ export default function ImageAnalysis() {
 
       if (currentScheme.imageData) {
         loadImage(currentScheme.imageData).then((img) => {
-          setRestoreImage(img);
+          setSourceImage(img);
         }).catch(() => {});
       }
     }
@@ -117,15 +116,7 @@ export default function ImageAnalysis() {
     if (sourceImage) {
       processImage(sourceImage);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stripeWidth, colorMode, brightnessThreshold, contrast, brightness]);
-
-  useEffect(() => {
-    if (restoreImage) {
-      setSourceImage(restoreImage);
-      setRestoreImage(null);
-    }
-  }, [restoreImage]);
+  }, [sourceImage, processImage]);
 
   const handleFile = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/')) {
