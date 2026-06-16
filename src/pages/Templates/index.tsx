@@ -10,7 +10,11 @@ import {
   Layers,
   Ruler,
   Grid3x3,
-  Eye,
+  X,
+  Save,
+  Clock,
+  Palette,
+  Play,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/common/PageHeader';
@@ -22,11 +26,27 @@ import { renderWeavingCanvas } from '@/utils/weavingUtils';
 
 export default function Templates() {
   const navigate = useNavigate();
-  const { templates, addTemplate, deleteTemplate, toggleTemplateFavorite, setCurrentScheme, currentScheme } = useAppStore();
+  const {
+    templates,
+    addTemplate,
+    deleteTemplate,
+    toggleTemplateFavorite,
+    setCurrentScheme,
+    currentScheme,
+    incrementTemplateUsage,
+  } = useAppStore();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [saveForm, setSaveForm] = useState({
+    name: '',
+    category: 'pattern',
+    description: '',
+    difficulty: 2,
+  });
 
   const filteredTemplates = useMemo(() => {
     return templates.filter((t) => {
@@ -46,21 +66,31 @@ export default function Templates() {
 
   const handleUseTemplate = (template: Template) => {
     setCurrentScheme(template.scheme);
-    navigate('/');
+    incrementTemplateUsage(template.id);
+    navigate('/weaving-preview');
   };
 
-  const handleSaveAsTemplate = () => {
+  const handleOpenSaveModal = () => {
     if (!currentScheme) {
-      alert('请先生成一个编织方案');
+      alert('请先在图像解析或挑压成像页生成编织方案');
       navigate('/');
       return;
     }
+    setSaveForm({
+      name: '新模板',
+      category: 'pattern',
+      description: '',
+      difficulty: 2,
+    });
+    setShowSaveModal(true);
+  };
 
-    const name = prompt('请输入模板名称：', '新模板');
-    if (!name) return;
-
-    const category = prompt('请选择分类 (landscape/figure/flower-bird/calligraphy/pattern/animal)：', 'pattern');
-    if (!category) return;
+  const handleSaveTemplate = () => {
+    if (!currentScheme) return;
+    if (!saveForm.name.trim()) {
+      alert('请输入模板名称');
+      return;
+    }
 
     const thumbCanvas = renderWeavingCanvas(
       currentScheme.pixels,
@@ -71,24 +101,30 @@ export default function Templates() {
 
     const newTemplate: Template = {
       id: generateId(),
-      name,
-      category,
-      description: '',
+      name: saveForm.name,
+      category: saveForm.category,
+      description: saveForm.description,
       thumbnail: thumbCanvas.toDataURL('image/png'),
       scheme: currentScheme,
       isFavorite: false,
       usageCount: 0,
-      difficulty: 2,
+      difficulty: saveForm.difficulty,
       createdAt: new Date().toISOString(),
     };
 
     addTemplate(newTemplate);
-    alert('模板已保存！');
+    setShowSaveModal(false);
+    setSaveForm({
+      name: '',
+      category: 'pattern',
+      description: '',
+      difficulty: 2,
+    });
   };
 
   const handleDelete = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('确定要删除这个模板吗？')) {
+    if (confirm('确定要删除这个模板吗？此操作不可恢复。')) {
       deleteTemplate(id);
     }
   };
@@ -113,7 +149,7 @@ export default function Templates() {
         actions={
           <div className="flex items-center gap-3">
             <button
-              onClick={handleSaveAsTemplate}
+              onClick={handleOpenSaveModal}
               className="btn-secondary flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
@@ -211,7 +247,7 @@ export default function Templates() {
                   : '点击右上角按钮将当前方案保存为模板'}
               </p>
               {!searchTerm && activeCategory === 'all' && !showFavoritesOnly && (
-                <button onClick={handleSaveAsTemplate} className="btn-primary">
+                <button onClick={handleOpenSaveModal} className="btn-primary">
                   保存当前方案为模板
                 </button>
               )}
@@ -252,33 +288,51 @@ export default function Templates() {
                         onClick={() => handleUseTemplate(template)}
                         className="w-full py-2 bg-bamboo-600 text-white rounded-lg text-sm font-medium hover:bg-bamboo-700 transition-colors flex items-center justify-center gap-2"
                       >
-                        <Eye className="w-4 h-4" />
+                        <Play className="w-4 h-4" />
                         使用此模板
                       </button>
                     </div>
 
-                    <div className="absolute top-3 left-3">
+                    <div className="absolute top-3 left-3 flex items-center gap-2">
                       <span className="px-2 py-1 bg-white/80 backdrop-blur-sm rounded text-xs text-ink-600">
                         {getCategoryName(template.category)}
                       </span>
+                      {template.usageCount > 0 && (
+                        <span className="px-2 py-1 bg-bamboo-100/90 backdrop-blur-sm rounded text-xs text-bamboo-700 font-medium">
+                          × {template.usageCount}
+                        </span>
+                      )}
                     </div>
                   </div>
 
                   <div className="p-4">
                     <div className="flex items-start justify-between mb-2">
-                      <h4 className="font-medium text-ink-800 truncate">{template.name}</h4>
+                      <h4 className="font-medium text-ink-800 truncate flex-1 mr-2">
+                        {template.name}
+                      </h4>
                       <button
                         onClick={(e) => handleDelete(template.id, e)}
-                        className="p-1 text-ink-300 hover:text-cinnabar-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="p-1 text-ink-300 hover:text-cinnabar-600 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                        title="删除模板"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
 
+                    {template.description && (
+                      <p className="text-xs text-ink-500 mb-3 line-clamp-2">
+                        {template.description}
+                      </p>
+                    )}
+
                     <div className="flex items-center gap-3 text-xs text-ink-400 mb-3">
                       <div className="flex items-center gap-1">
                         <Ruler className="w-3 h-3" />
                         {template.scheme.pixelWidth}×{template.scheme.pixelHeight}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Palette className="w-3 h-3" />
+                        {template.scheme.colors.length}色
                       </div>
                       <div className="flex items-center gap-0.5">
                         {renderDifficultyStars(template.difficulty)}
@@ -286,8 +340,13 @@ export default function Templates() {
                     </div>
 
                     <div className="flex items-center justify-between text-xs text-ink-400">
-                      <span>{formatDate(template.createdAt).split(' ')[0]}</span>
-                      <span>使用 {template.usageCount} 次</span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {formatDate(template.createdAt).split(' ')[0]}
+                      </span>
+                      <span>
+                        篾宽 {template.scheme.stripeWidth}mm
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -296,6 +355,133 @@ export default function Templates() {
           )}
         </div>
       </div>
+
+      {showSaveModal && (
+        <div className="fixed inset-0 bg-ink-900/50 flex items-center justify-center z-50 p-4">
+          <div className="card w-full max-w-xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="card-header flex items-center justify-between">
+              <h3 className="font-medium text-ink-800">保存为模板</h3>
+              <button
+                onClick={() => setShowSaveModal(false)}
+                className="p-1 text-ink-400 hover:text-ink-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto flex-1 space-y-4">
+              <div>
+                <label className="text-sm font-medium text-ink-700 block mb-1.5">
+                  模板名称 *
+                </label>
+                <input
+                  type="text"
+                  value={saveForm.name}
+                  onChange={(e) => setSaveForm({ ...saveForm, name: e.target.value })}
+                  className="input-field"
+                  placeholder="如：梅兰竹菊纹样"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-ink-700 block mb-1.5">
+                  模板分类
+                </label>
+                <select
+                  value={saveForm.category}
+                  onChange={(e) => setSaveForm({ ...saveForm, category: e.target.value })}
+                  className="input-field"
+                >
+                  {templateCategories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-ink-700 block mb-1.5">
+                  模板描述
+                </label>
+                <textarea
+                  value={saveForm.description}
+                  onChange={(e) => setSaveForm({ ...saveForm, description: e.target.value })}
+                  className="input-field min-h-[80px] resize-none"
+                  placeholder="描述模板的特点、适用场景等"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-ink-700 block mb-1.5">
+                  难度等级
+                </label>
+                <div className="flex items-center gap-2 pt-2">
+                  {[1, 2, 3, 4, 5].map((level) => (
+                    <button
+                      key={level}
+                      type="button"
+                      onClick={() => setSaveForm({ ...saveForm, difficulty: level })}
+                      className="p-1"
+                    >
+                      <Star
+                        className={`w-7 h-7 ${
+                          level <= saveForm.difficulty
+                            ? 'text-parchment-500 fill-parchment-500'
+                            : 'text-parchment-200'
+                        }`}
+                      />
+                    </button>
+                  ))}
+                  <span className="ml-3 text-sm text-ink-500">
+                    {['', '入门', '简单', '中等', '复杂', '精品'][saveForm.difficulty]}
+                  </span>
+                </div>
+              </div>
+
+              {currentScheme && (
+                <div className="p-4 bg-parchment-50 rounded-lg border border-parchment-200">
+                  <div className="text-xs text-ink-500 mb-2">方案预览</div>
+                  <div className="grid grid-cols-3 gap-3 text-sm">
+                    <div>
+                      <div className="text-ink-400 text-xs mb-0.5">分辨率</div>
+                      <div className="font-medium text-ink-700">
+                        {currentScheme.pixelWidth}×{currentScheme.pixelHeight}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-ink-400 text-xs mb-0.5">篾宽</div>
+                      <div className="font-medium text-ink-700">
+                        {currentScheme.stripeWidth}mm
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-ink-400 text-xs mb-0.5">色数</div>
+                      <div className="font-medium text-ink-700">
+                        {currentScheme.colors.length}种
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="card-header flex justify-end gap-3 flex-shrink-0">
+              <button
+                onClick={() => setShowSaveModal(false)}
+                className="btn-secondary"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSaveTemplate}
+                className="btn-primary flex items-center gap-2"
+              >
+                <Save className="w-4 h-4" />
+                保存模板
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -13,21 +13,46 @@ import {
   Save,
   FileText,
   Layers,
+  X,
+  Tag,
+  Calendar,
+  Star,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/common/PageHeader';
 import { useAppStore } from '@/store/useAppStore';
 import { renderWeavingCanvas } from '@/utils/weavingUtils';
+import { generateId } from '@/utils/colorUtils';
+import { CraftArchive } from '@/types';
+import { materialTypes } from '@/data/defaultData';
 
 export default function WeavingPreview() {
   const navigate = useNavigate();
-  const { currentScheme, ui, setViewMode, setZoomLevel } = useAppStore();
+  const {
+    currentScheme,
+    ui,
+    setViewMode,
+    setZoomLevel,
+    addArchive,
+  } = useAppStore();
   const { viewMode, zoomLevel, showDeviation } = ui;
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const dragStart = useRef({ x: 0, y: 0 });
+
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [saveForm, setSaveForm] = useState({
+    title: '',
+    description: '',
+    tags: '',
+    material: 'phyllostachys-pubescens',
+    thickness: 0.8,
+    difficulty: 2,
+    estimatedHours: 40,
+    notes: '',
+  });
 
   const renderedCanvas = useMemo(() => {
     if (!currentScheme) return null;
@@ -80,6 +105,53 @@ export default function WeavingPreview() {
     setZoomLevel(Math.max(0.5, zoomLevel - 0.2));
   };
 
+  const handleSaveArchive = () => {
+    if (!currentScheme) return;
+    if (!saveForm.title.trim()) {
+      alert('请输入作品名称');
+      return;
+    }
+
+    const thumbCanvas = renderWeavingCanvas(
+      currentScheme.pixels,
+      currentScheme.colors,
+      'far',
+      currentScheme.stripeWidth
+    );
+
+    const archive: CraftArchive = {
+      id: generateId(),
+      title: saveForm.title,
+      description: saveForm.description,
+      tags: saveForm.tags.split(',').map((t) => t.trim()).filter(Boolean),
+      scheme: currentScheme,
+      craftParams: {
+        material: saveForm.material,
+        thickness: saveForm.thickness,
+        difficulty: saveForm.difficulty,
+        estimatedHours: saveForm.estimatedHours,
+      },
+      notes: saveForm.notes,
+      thumbnail: thumbCanvas.toDataURL('image/png'),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    addArchive(archive);
+    setShowSaveModal(false);
+    setSaveForm({
+      title: '',
+      description: '',
+      tags: '',
+      material: 'phyllostachys-pubescens',
+      thickness: 0.8,
+      difficulty: 2,
+      estimatedHours: 40,
+      notes: '',
+    });
+    navigate('/archives');
+  };
+
   const validation = currentScheme?.weavingValidation;
 
   const riskColor = {
@@ -115,10 +187,15 @@ export default function WeavingPreview() {
         />
         <div className="card p-12 text-center">
           <Eye className="w-16 h-16 mx-auto mb-4 text-parchment-400" />
-          <p className="text-ink-500 mb-6">请先在「图像解析」页面上传并处理图像</p>
-          <button onClick={() => navigate('/')} className="btn-primary">
-            前往图像解析
-          </button>
+          <p className="text-ink-500 mb-6">请先在「图像解析」页面上传并处理图像，或从模板库选择一个模板</p>
+          <div className="flex items-center justify-center gap-3">
+            <button onClick={() => navigate('/')} className="btn-primary">
+              前往图像解析
+            </button>
+            <button onClick={() => navigate('/templates')} className="btn-secondary">
+              浏览模板库
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -144,11 +221,11 @@ export default function WeavingPreview() {
               导出方案
             </button>
             <button
-              onClick={() => navigate('/archives')}
+              onClick={() => setShowSaveModal(true)}
               className="btn-primary flex items-center gap-2"
             >
               <Save className="w-4 h-4" />
-              保存档案
+              保存为档案
             </button>
           </div>
         }
@@ -369,6 +446,167 @@ export default function WeavingPreview() {
           </div>
         </div>
       </div>
+
+      {showSaveModal && (
+        <div className="fixed inset-0 bg-ink-900/50 flex items-center justify-center z-50 p-4">
+          <div className="card w-full max-w-xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="card-header flex items-center justify-between">
+              <h3 className="font-medium text-ink-800">保存为工艺档案</h3>
+              <button
+                onClick={() => setShowSaveModal(false)}
+                className="p-1 text-ink-400 hover:text-ink-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto flex-1 space-y-4">
+              <div>
+                <label className="text-sm font-medium text-ink-700 block mb-1.5">
+                  作品名称 *
+                </label>
+                <input
+                  type="text"
+                  value={saveForm.title}
+                  onChange={(e) => setSaveForm({ ...saveForm, title: e.target.value })}
+                  className="input-field"
+                  placeholder="如：山居秋暝竹编画"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-ink-700 block mb-1.5">
+                  作品描述
+                </label>
+                <textarea
+                  value={saveForm.description}
+                  onChange={(e) => setSaveForm({ ...saveForm, description: e.target.value })}
+                  className="input-field min-h-[70px] resize-none"
+                  placeholder="描述作品的主题、创意、灵感来源等"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-ink-700 block mb-1.5 flex items-center gap-1.5">
+                  <Tag className="w-4 h-4" />
+                  标签（用逗号分隔）
+                </label>
+                <input
+                  type="text"
+                  value={saveForm.tags}
+                  onChange={(e) => setSaveForm({ ...saveForm, tags: e.target.value })}
+                  className="input-field"
+                  placeholder="如：山水, 传统, 精品"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-ink-700 block mb-1.5">
+                    竹材种类
+                  </label>
+                  <select
+                    value={saveForm.material}
+                    onChange={(e) => setSaveForm({ ...saveForm, material: e.target.value })}
+                    className="input-field"
+                  >
+                    {materialTypes.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-ink-700 block mb-1.5">
+                    篾厚 (mm)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0.2"
+                    value={saveForm.thickness}
+                    onChange={(e) =>
+                      setSaveForm({ ...saveForm, thickness: parseFloat(e.target.value) || 0.8 })
+                    }
+                    className="input-field"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-ink-700 block mb-1.5">
+                    难度等级
+                  </label>
+                  <div className="flex items-center gap-1 pt-1">
+                    {[1, 2, 3, 4, 5].map((level) => (
+                      <button
+                        key={level}
+                        type="button"
+                        onClick={() => setSaveForm({ ...saveForm, difficulty: level })}
+                        className="p-1"
+                      >
+                        <Star
+                          className={`w-7 h-7 ${
+                            level <= saveForm.difficulty
+                              ? 'text-parchment-500 fill-parchment-500'
+                              : 'text-parchment-200'
+                          }`}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-ink-700 block mb-1.5">
+                    预估工时 (小时)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={saveForm.estimatedHours}
+                    onChange={(e) =>
+                      setSaveForm({
+                        ...saveForm,
+                        estimatedHours: parseInt(e.target.value) || 40,
+                      })
+                    }
+                    className="input-field"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-ink-700 block mb-1.5 flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4" />
+                  创作笔记
+                </label>
+                <textarea
+                  value={saveForm.notes}
+                  onChange={(e) => setSaveForm({ ...saveForm, notes: e.target.value })}
+                  className="input-field min-h-[80px] resize-none"
+                  placeholder="记录编织过程中的心得、技巧、遇到的问题及解决方法等"
+                />
+              </div>
+            </div>
+            <div className="card-header flex justify-end gap-3 flex-shrink-0">
+              <button
+                onClick={() => setShowSaveModal(false)}
+                className="btn-secondary"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSaveArchive}
+                className="btn-primary flex items-center gap-2"
+              >
+                <Save className="w-4 h-4" />
+                保存档案
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

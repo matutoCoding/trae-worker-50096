@@ -10,6 +10,9 @@ import {
   ArrowRight,
   Eye,
   EyeOff,
+  List,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/common/PageHeader';
@@ -22,7 +25,15 @@ import {
   calculateMaterialEstimate,
   validateWeaving,
 } from '@/utils/weavingUtils';
+import {
+  analyzeWarpSequences,
+  analyzeWeftSequences,
+  calculateColorSegmentSummary,
+  StripeSequence,
+} from '@/utils/sequenceUtils';
 import { defaultMonochromeColors, defaultMulticolorPalette } from '@/data/defaultData';
+
+type SequenceTab = 'warp' | 'weft' | 'summary';
 
 export default function StripesLayout() {
   const navigate = useNavigate();
@@ -33,7 +44,10 @@ export default function StripesLayout() {
   const [isAddingColor, setIsAddingColor] = useState(false);
   const [newColor, setNewColor] = useState({ name: '', hex: '#666666' });
 
-  const colors = currentScheme?.colors || [];
+  const [sequenceTab, setSequenceTab] = useState<SequenceTab>('summary');
+  const [expandedStripe, setExpandedStripe] = useState<number | null>(null);
+
+  const colors = useMemo(() => currentScheme?.colors || [], [currentScheme]);
 
   const stats = useMemo(() => {
     if (!currentScheme) return null;
@@ -54,6 +68,26 @@ export default function StripesLayout() {
 
     return { mild, moderate, severe };
   }, [currentScheme]);
+
+  const warpSequences = useMemo(() => {
+    if (!currentScheme) return [] as StripeSequence[];
+    return analyzeWarpSequences(currentScheme.pixels, colors);
+  }, [currentScheme, colors]);
+
+  const weftSequences = useMemo(() => {
+    if (!currentScheme) return [] as StripeSequence[];
+    return analyzeWeftSequences(currentScheme.pixels, colors);
+  }, [currentScheme, colors]);
+
+  const warpSummary = useMemo(() => {
+    if (!currentScheme) return new Map();
+    return calculateColorSegmentSummary(warpSequences, currentScheme.stripeWidth);
+  }, [warpSequences, currentScheme]);
+
+  const weftSummary = useMemo(() => {
+    if (!currentScheme) return new Map();
+    return calculateColorSegmentSummary(weftSequences, currentScheme.stripeWidth);
+  }, [weftSequences, currentScheme]);
 
   const handleColorChange = (index: number, field: 'name' | 'hex', value: string) => {
     if (!currentScheme) return;
@@ -219,14 +253,22 @@ export default function StripesLayout() {
         />
         <div className="card p-12 text-center">
           <Grid3x3 className="w-16 h-16 mx-auto mb-4 text-parchment-400" />
-          <p className="text-ink-500 mb-6">请先在「图像解析」页面上传并处理图像</p>
-          <button onClick={() => navigate('/')} className="btn-primary">
-            前往图像解析
-          </button>
+          <p className="text-ink-500 mb-6">请先在「图像解析」页面上传并处理图像，或从模板库选择一个模板</p>
+          <div className="flex items-center justify-center gap-3">
+            <button onClick={() => navigate('/')} className="btn-primary">
+              前往图像解析
+            </button>
+            <button onClick={() => navigate('/templates')} className="btn-secondary">
+              浏览模板库
+            </button>
+          </div>
         </div>
       </div>
     );
   }
+
+  const activeSequences = sequenceTab === 'warp' ? warpSequences : weftSequences;
+  const sequenceLabel = sequenceTab === 'warp' ? '经篾' : '纬篾';
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -255,7 +297,7 @@ export default function StripesLayout() {
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 space-y-6">
           <div className="card">
             <div className="card-header flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -274,7 +316,7 @@ export default function StripesLayout() {
                 {showDeviation ? '显示偏差' : '隐藏偏差'}
               </button>
             </div>
-            <div className="p-4 bg-parchment-100/30 flex items-center justify-center overflow-auto min-h-[500px]">
+            <div className="p-4 bg-parchment-100/30 flex items-center justify-center overflow-auto min-h-[400px]">
               <div
                 className="inline-grid gap-0 border border-parchment-300 shadow-lg"
                 style={{
@@ -310,6 +352,208 @@ export default function StripesLayout() {
                   })
                 )}
               </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-header flex items-center gap-2">
+              <List className="w-5 h-5 text-bamboo-600" />
+              <h3 className="font-medium text-ink-800">色篾排布序列</h3>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="flex items-center gap-1 bg-parchment-100 rounded-lg p-1">
+                <button
+                  onClick={() => setSequenceTab('summary')}
+                  className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                    sequenceTab === 'summary'
+                      ? 'bg-white text-bamboo-700 shadow-sm'
+                      : 'text-ink-500 hover:text-ink-700'
+                  }`}
+                >
+                  染色用量总览
+                </button>
+                <button
+                  onClick={() => setSequenceTab('warp')}
+                  className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                    sequenceTab === 'warp'
+                      ? 'bg-white text-bamboo-700 shadow-sm'
+                      : 'text-ink-500 hover:text-ink-700'
+                  }`}
+                >
+                  经篾序列 ({warpSequences.length}根)
+                </button>
+                <button
+                  onClick={() => setSequenceTab('weft')}
+                  className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                    sequenceTab === 'weft'
+                      ? 'bg-white text-bamboo-700 shadow-sm'
+                      : 'text-ink-500 hover:text-ink-700'
+                  }`}
+                >
+                  纬篾序列 ({weftSequences.length}根)
+                </button>
+              </div>
+
+              {sequenceTab === 'summary' ? (
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="text-sm font-medium text-ink-700 mb-3">经篾染色用量</h4>
+                    <div className="space-y-2">
+                      {colors.map((color) => {
+                        const stat = warpSummary.get(color.hex);
+                        if (!stat) return null;
+                        return (
+                          <div
+                            key={color.id}
+                            className="flex items-center gap-3 p-2 bg-parchment-50 rounded-lg"
+                          >
+                            <div
+                              className="w-8 h-8 rounded border border-parchment-300 flex-shrink-0"
+                              style={{ backgroundColor: color.hex }}
+                            />
+                            <div className="flex-1">
+                              <div className="font-medium text-sm text-ink-700">{color.name}</div>
+                              <div className="text-xs text-ink-400">
+                                {stat.totalSegments} 段色 · 累计 {stat.totalLength} 格
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-bamboo-700 font-bold">{stat.totalMeters.toFixed(2)} m</div>
+                              <div className="text-xs text-ink-400">需要染色长度</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="decoration-line" />
+
+                  <div>
+                    <h4 className="text-sm font-medium text-ink-700 mb-3">纬篾染色用量</h4>
+                    <div className="space-y-2">
+                      {colors.map((color) => {
+                        const stat = weftSummary.get(color.hex);
+                        if (!stat) return null;
+                        return (
+                          <div
+                            key={color.id}
+                            className="flex items-center gap-3 p-2 bg-parchment-50 rounded-lg"
+                          >
+                            <div
+                              className="w-8 h-8 rounded border border-parchment-300 flex-shrink-0"
+                              style={{ backgroundColor: color.hex }}
+                            />
+                            <div className="flex-1">
+                              <div className="font-medium text-sm text-ink-700">{color.name}</div>
+                              <div className="text-xs text-ink-400">
+                                {stat.totalSegments} 段色 · 累计 {stat.totalLength} 格
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-bamboo-700 font-bold">{stat.totalMeters.toFixed(2)} m</div>
+                              <div className="text-xs text-ink-400">需要染色长度</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-bamboo-50 rounded-lg border border-bamboo-100">
+                    <p className="text-xs text-ink-500">
+                      💡 <span className="font-medium">备料提示：</span>
+                      以上为理论计算长度，实际备料时建议增加 15-20% 的余量，以应对编织损耗和截断。
+                      多段色同色可合并染色，减少换色次数。
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[450px] overflow-y-auto scrollbar-thin pr-1">
+                  <p className="text-xs text-ink-400 mb-3">
+                    {sequenceLabel}从左到右/从上到下排列，点击展开查看该根篾的连续色段分布
+                  </p>
+                  {activeSequences.slice(0, 50).map((seq) => {
+                    const isExpanded = expandedStripe === seq.index;
+                    return (
+                      <div
+                        key={seq.index}
+                        className="border border-parchment-200 rounded-lg overflow-hidden"
+                      >
+                        <button
+                          onClick={() => setExpandedStripe(isExpanded ? null : seq.index)}
+                          className="w-full flex items-center gap-2 p-2.5 bg-parchment-50 hover:bg-parchment-100 transition-colors"
+                        >
+                          <span className="w-16 text-sm font-medium text-ink-500 flex-shrink-0">
+                            {sequenceLabel}第 {seq.index + 1} 根
+                          </span>
+                          <div className="flex-1 flex gap-0.5">
+                            {seq.segments.slice(0, 20).map((seg, i) => (
+                              <div
+                                key={i}
+                                className="h-5 rounded-sm"
+                                style={{
+                                  backgroundColor: seg.colorHex,
+                                  flex: seg.length,
+                                  minWidth: '4px',
+                                }}
+                                title={`${seg.colorName}: ${seg.length}格`}
+                              />
+                            ))}
+                            {seq.segments.length > 20 && (
+                              <span className="text-xs text-ink-400 self-center ml-1">
+                                +{seq.segments.length - 20}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-ink-400 flex-shrink-0 w-20 text-right">
+                            {seq.segments.length} 段色
+                          </span>
+                          {isExpanded ? (
+                            <ChevronUp className="w-4 h-4 text-ink-400 flex-shrink-0" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4 text-ink-400 flex-shrink-0" />
+                          )}
+                        </button>
+                        {isExpanded && (
+                          <div className="p-3 bg-white border-t border-parchment-200 space-y-1.5">
+                            {seq.segments.map((seg, i) => (
+                              <div
+                                key={i}
+                                className="flex items-center gap-3 p-2 rounded-lg hover:bg-parchment-50"
+                              >
+                                <div
+                                  className="w-6 h-6 rounded border border-parchment-300 flex-shrink-0"
+                                  style={{ backgroundColor: seg.colorHex }}
+                                />
+                                <div className="flex-1">
+                                  <span className="text-sm font-medium text-ink-700">
+                                    {seg.colorName}
+                                  </span>
+                                </div>
+                                <div className="text-xs text-ink-500">
+                                  位置 {seg.start + 1} - {seg.end + 1}
+                                </div>
+                                <div className="text-sm font-medium text-bamboo-700 w-20 text-right">
+                                  {seg.length} 格
+                                </div>
+                                <div className="text-xs text-ink-400 w-20 text-right">
+                                  {((seg.length * currentScheme.stripeWidth) / 1000).toFixed(3)} m
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {activeSequences.length > 50 && (
+                    <p className="text-center text-xs text-ink-400 py-2">
+                      仅显示前 50 根{sequenceLabel}，共 {activeSequences.length} 根
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -17,6 +17,7 @@ interface AppState {
   updateTemplate: (id: string, updates: Partial<Template>) => void;
   deleteTemplate: (id: string) => void;
   toggleTemplateFavorite: (id: string) => void;
+  incrementTemplateUsage: (id: string) => void;
   setViewMode: (mode: ViewMode) => void;
   setZoomLevel: (zoom: number) => void;
   setShowDeviation: (show: boolean) => void;
@@ -74,6 +75,12 @@ export const useAppStore = create<AppState>()(
             t.id === id ? { ...t, isFavorite: !t.isFavorite } : t
           ),
         })),
+      incrementTemplateUsage: (id) =>
+        set((state) => ({
+          templates: state.templates.map((t) =>
+            t.id === id ? { ...t, usageCount: t.usageCount + 1 } : t
+          ),
+        })),
       setViewMode: (mode) =>
         set((state) => ({ ui: { ...state.ui, viewMode: mode } })),
       setZoomLevel: (zoom) =>
@@ -88,6 +95,7 @@ export const useAppStore = create<AppState>()(
     {
       name: 'bamboo-weaving-storage',
       partialize: (state) => ({
+        currentScheme: state.currentScheme,
         archives: state.archives,
         templates: state.templates,
         ui: state.ui,

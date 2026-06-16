@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   FileText,
   Plus,
@@ -13,6 +13,8 @@ import {
   Layers,
   Ruler,
   Star,
+  Play,
+  ExternalLink,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/common/PageHeader';
@@ -23,13 +25,20 @@ import { materialTypes } from '@/data/defaultData';
 
 export default function Archives() {
   const navigate = useNavigate();
-  const { archives, addArchive, updateArchive, deleteArchive, currentScheme } = useAppStore();
+  const { archives, addArchive, updateArchive, deleteArchive, currentScheme, setCurrentScheme } = useAppStore();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedArchive, setSelectedArchive] = useState<CraftArchive | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editForm, setEditForm] = useState<Partial<CraftArchive>>({});
+
+  useEffect(() => {
+    if (archives.length > 0 && !selectedArchive) {
+      setSelectedArchive(archives[0]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [archives]);
 
   const filteredArchives = archives.filter(
     (archive) =>
@@ -220,6 +229,26 @@ export default function Archives() {
               <div className="card-header flex items-center justify-between">
                 <h3 className="font-medium text-ink-800">{selectedArchive.title}</h3>
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setCurrentScheme(selectedArchive.scheme);
+                      navigate('/weaving-preview');
+                    }}
+                    className="btn-secondary flex items-center gap-1.5 text-sm py-1.5 px-3"
+                  >
+                    <Play className="w-3.5 h-3.5" />
+                    查看模拟
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCurrentScheme(selectedArchive.scheme);
+                      navigate('/');
+                    }}
+                    className="btn-secondary flex items-center gap-1.5 text-sm py-1.5 px-3"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    继续编辑
+                  </button>
                   <button
                     onClick={() => handleEdit(selectedArchive)}
                     className="p-2 text-ink-500 hover:text-bamboo-600 hover:bg-bamboo-50 rounded-lg transition-colors"
